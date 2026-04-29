@@ -1,0 +1,41 @@
+{
+  "summary": "Backend-only testing for OpsFlow Slack webhook gating + email-resolution branch. 22/22 pytest cases passed against the public REACT_APP_BACKEND_URL. Validated URL verification, Slack retry ack, bot/subtype filters, keyword + tagged-user gating, thread-reply skip, dedupe by slack_thread_ts, ticket creation with source='slack' (mappings + mock thread reply), auto-resolve on white_check_mark reaction (negative case 'eyes' correctly ignored), and POST /api/tickets/{id}/resolve email branch (logs show 'MOCK: Sending email to ...' + 'Resolution email dispatched'). Slack-source resolve still posts mock reply to thread (existing behaviour preserved). Health + tickets list/create flows unbroken.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/webhooks/slack/events", "issue": "When SLACK_SIGNING_SECRET is empty the endpoint accepts any unsigned payload. Acceptable for mock/preview but a WARN log fires on every request; should be hardened before production."},
+      {"endpoint": "/api/tickets/", "issue": "DELETE not exposed via router (only update/resolve/get/post). Cleanup fixture silently skips deletes - test data accumulates."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_slack_webhook_resolution.py",
+    "/app/test_reports/pytest/iter_slack.xml"
+  ],
+  "action_items": [
+    "Optional: expose DELETE /api/tickets/{id} so test cleanup can remove TEST_ prefixed tickets (currently they accumulate in test_database).",
+    "Optional: when SLACK_SIGNING_SECRET unset, log once at startup instead of on every event request to reduce noise."
+  ],
+  "critical_code_review_comments": [
+    "routes/webhooks.py uses background_tasks for Slack handling (good), but _handle_slack_message catches all exceptions and returns silently - any future bug would be invisible to callers. Consider emitting a structured failure metric.",
+    "services/ticket_service.py resolve_ticket: the email-resolution branch falls back to ticket.sender_email when no email_mapping is found - this is correct, but in_reply_to and cc are then None/[] which means the mail is a brand-new message (not a reply). Make sure product is OK with that for tickets that lack a stored mapping (e.g. tickets created via POST /api/tickets/ rather than the email poller).",
+    "services/ticket_service.py create_ticket dedupes only by 'sender_email + normalized summary + status != resolved'. A Slack-source ticket has sender_email synthesised from user_id; if two different Slack users post the same text on the same day they could collide via the dedupe path. Slack-side dedupe via slack_thread_ts (find_by_slack_thread) protects the happy path, but the email-style dedupe still runs first inside create_ticket - low risk, but worth a note.",
+    "_extract_mentioned_user_ids regex [A-Z0-9]+ accepts purely numeric strings which Slack will not produce (Slack IDs are 'U' + alnum). Minor robustness improvement: anchor with ^U.",
+    "config.py loads via lru_cache get_settings(); if .env is changed at runtime, cache must be invalidated (require service restart). Already documented but worth re-confirming during deploy."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_slack_webhook_resolution.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "not tested (per request)"},
+  "test_credentials": "N/A (no auth on these endpoints in mock/preview env)",
+  "seed_data_creation": "Tests dynamically POST tickets prefixed with TEST_ and Slack events with unique ts. No DELETE endpoint, so seeded data persists in tickets/slack_ticket_maps collections. Slack-channel id used in tests: C_BUG_REPORTING; reporter user: U_REPORTER; ops user mention: <@U07OPS123>.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest file at /app/backend/tests/test_slack_webhook_resolution.py is the regression suite for the Slack webhook + resolve-email branch. Run: `cd /app/backend && pytest tests/test_slack_webhook_resolution.py -v`. All third-party (Slack/Jira/Email) services are MOCKED in this preview env; tests rely on REST state + supervisor backend logs ('MOCK: ...' lines) for verification, not real API calls. SLACK_SIGNING_SECRET is intentionally empty so signature check is skipped. SLACK_TAGGED_USER_IDS=U07OPS123 is set in /app/backend/.env. If new tagged-user IDs are added, update the test event text accordingly.",
+  "rca of the issue": "N/A - no failing tests; this iteration validates the new feature implementation."
+}
