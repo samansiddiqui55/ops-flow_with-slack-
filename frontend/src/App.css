@@ -500,13 +500,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;            /* P1 fix: allow text truncation inside flex */
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .summary-value {
   font-size: 28px;
   font-weight: 700;
   color: var(--text-primary);
-  line-height: 1;
+  line-height: 1.1;
+  /* P1 fix: wrap/clip long client names like "Wholsumfoods" so they don't overflow the card */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .summary-label {

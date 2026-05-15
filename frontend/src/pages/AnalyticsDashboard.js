@@ -321,7 +321,11 @@ function AnalyticsDashboard({ onNavigate }) {
                   <AlertTriangle size={32} color="#f59e0b" />
                 </div>
                 <div className="summary-content">
-                  <span className="summary-value" style={{ fontSize: data?.summary?.top_issue_type?.issue_type?.length > 15 ? '18px' : '28px' }}>
+                  <span
+                    className="summary-value"
+                    title={data?.summary?.top_issue_type?.issue_type || "N/A"}
+                    style={{ fontSize: data?.summary?.top_issue_type?.issue_type?.length > 15 ? '18px' : '28px' }}
+                  >
                     {data?.summary?.top_issue_type?.issue_type || "N/A"}
                   </span>
                   <span className="summary-label">Top Issue Type</span>
@@ -333,7 +337,11 @@ function AnalyticsDashboard({ onNavigate }) {
                   <Crown size={32} color="#8b5cf6" />
                 </div>
                 <div className="summary-content">
-                  <span className="summary-value" style={{ fontSize: data?.summary?.top_client?.brand?.length > 12 ? '18px' : '28px' }}>
+                  <span
+                    className="summary-value"
+                    title={data?.summary?.top_client?.brand || "N/A"}
+                    style={{ fontSize: data?.summary?.top_client?.brand?.length > 12 ? '18px' : '28px' }}
+                  >
                     {data?.summary?.top_client?.brand || "N/A"}
                   </span>
                   <span className="summary-label">Top Client</span>
