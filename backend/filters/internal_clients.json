@@ -1,0 +1,37 @@
+{
+  "_comment": "OpsFlow analytics: internal/test brands that should be excluded from CLIENT-FACING analytics. Edit and reload (no code change). Matched case-insensitively as exact OR substring on ticket.brand.",
+  "internal_brands": [
+    "Blitznow",
+    "Blitz",
+    "Grow Simplee",
+    "Growsimplee",
+    "OpsFlow",
+    "Internal",
+    "Test",
+    "Testing",
+    "Demo",
+    "QA",
+    "Sandbox",
+    "Dev",
+    "Unknown Brand"
+  ],
+  "internal_brand_substrings": [
+    "bug-reporting",
+    "bug_reporting",
+    "bug reporting",
+    "testing",
+    "internal",
+    "qa-",
+    "-qa",
+    "staging",
+    "sandbox",
+    "demo"
+  ],
+  "internal_slack_channels": [
+    "#bug-reporting",
+    "#testing",
+    "#qa",
+    "#internal",
+    "#staging"
+  ]
+}

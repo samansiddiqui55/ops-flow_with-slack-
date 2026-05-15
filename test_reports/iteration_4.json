@@ -1,0 +1,34 @@
+{
+  "summary": "Backend regression for OpsFlow Changes 1-6 + health/WS. 15/15 pytest cases passed against the public REACT_APP_BACKEND_URL. Covered: resolve/reopen + activity_history, junk email filter (block + allowlist), analytics internal-brand exclusion (summary, brand-frequency, issues-by-client, tat-by-client), period filters (1w<=1m<=1y<=all), hybrid issue classifier (Delay/TAT, Other, Webhook), display_message strip + raw full_message preservation, WebSocket broadcast of ticket_resolved + ticket_reopened.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/tickets/{id}/reopen", "issue": "When called on a non-resolved ticket, the route still returns 200 with a 'reopen' route alias although service correctly skips state transition. Behavior is correct but route name is slightly misleading; consider 'comment' endpoint for that path. Functional behavior verified."},
+      {"endpoint": "/api/tickets/", "issue": "DELETE /api/tickets/{id} not exposed (tests gracefully ignore). Cleanup of TEST_ prefixed tickets relies on this; main agent may want to expose a delete route or admin cleanup."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_opsflow_changes.py",
+    "/app/test_reports/pytest/iter4_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Expose DELETE /api/tickets/{id} or admin cleanup endpoint for TEST_ data hygiene.",
+    "(Cleanup) /app/backend/server.py still contains ~200 lines of commented-out legacy code at top — recommend removing.",
+    "(Cleanup) /app/backend/routes/tickets.py top has ~48 lines of commented-out legacy code.",
+    "(Hardening) classify_issue_type_hybrid silently swallows all exceptions; consider logging at WARNING when LLM call fails so prod can detect API key/quota issues."
+  ],
+  "critical_code_review_comments": [
+    "server.py: large commented-out blocks (lines 1-217) hurt readability; safe to delete.",
+    "ticket_service.serialize_ticket() builds display_message every time on read — fine for small payloads but consider caching it at write-time for very large full_message documents.",
+    "analytics.parse_date_filter() returns (None, now) when period is unrecognized; an unknown 'period' value silently falls back to all-time. Consider 400 for invalid period values.",
+    "Two AsyncIOMotorClient instances are created (server.py + ticket_service.py) — minor resource duplication, consider injecting a single client via dependency."
+  ],
+  "updated_files": ["/app/backend/tests/test_opsflow_changes.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "not tested (skip per request)"},
+  "test_credentials": "Not required (no auth on API).",
+  "seed_data_creation": "Tests create transient TEST_ prefixed tickets (BrandReopen, BrandOpenOnly, BrandWS). Cleanup via DELETE is best-effort; endpoint may not exist so a few TEST_ tickets may remain in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_opsflow_changes.py -v . All 15 cases cover Changes 1-6 + WS + Health. BASE_URL is read from REACT_APP_BACKEND_URL. Tests are idempotent and create/delete (best-effort) their own data; they do not depend on the pre-seeded 100 tickets but do verify Blitznow/#bug-reporting/Testing brands are excluded from analytics."
+}
