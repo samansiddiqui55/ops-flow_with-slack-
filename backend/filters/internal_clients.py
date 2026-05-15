@@ -28,6 +28,7 @@ _internal: Dict[str, List[str]] = {
     "internal_brands": [],
     "internal_brand_substrings": [],
     "internal_slack_channels": [],
+    "internal_brand_regex_patterns": [],
 }
 
 
@@ -44,11 +45,14 @@ def reload() -> None:
             "internal_brands": _norm(raw.get("internal_brands", [])),
             "internal_brand_substrings": _norm(raw.get("internal_brand_substrings", [])),
             "internal_slack_channels": _norm(raw.get("internal_slack_channels", [])),
+            # Raw regex patterns - NOT escaped. Use with care.
+            "internal_brand_regex_patterns": _norm(raw.get("internal_brand_regex_patterns", [])),
         }
         logger.info(
             f"[INTERNAL-CLIENTS] loaded: brands={len(_internal['internal_brands'])} "
             f"substrings={len(_internal['internal_brand_substrings'])} "
-            f"channels={len(_internal['internal_slack_channels'])}"
+            f"channels={len(_internal['internal_slack_channels'])} "
+            f"regex={len(_internal['internal_brand_regex_patterns'])}"
         )
     except FileNotFoundError:
         logger.warning(f"[INTERNAL-CLIENTS] config not found at {CONFIG_PATH}")
@@ -70,6 +74,12 @@ def is_internal_brand(brand: str) -> bool:
     for ch in _internal["internal_slack_channels"]:
         if bl == ch.lower():
             return True
+    for pat in _internal["internal_brand_regex_patterns"]:
+        try:
+            if re.search(pat, bl, re.IGNORECASE):
+                return True
+        except re.error:
+            continue
     return False
 
 
@@ -82,6 +92,9 @@ def get_internal_brand_regexes() -> List[str]:
         pats.append(re.escape(sub))
     for ch in _internal["internal_slack_channels"]:
         pats.append(f"^{re.escape(ch)}$")
+    # Raw regex patterns from config (NOT escaped)
+    for pat in _internal["internal_brand_regex_patterns"]:
+        pats.append(pat)
     return pats
 
 

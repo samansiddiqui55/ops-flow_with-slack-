@@ -66,6 +66,48 @@ def _apply_internal_filter(match_stage: dict) -> dict:
     return merged
 
 
+# CHANGE 3 hotfix: ensure date-window filters work even when some legacy tickets
+# stored `created_at` as ISO strings instead of BSON dates. We do TWO things:
+#   1. If we have a date window, we OR-match both the date type AND the string
+#      form (using $expr + $dateFromString) so no historical ticket is lost.
+#   2. Outside of that, leave the match stage untouched.
+def _wrap_created_at_for_dates(match_stage: dict) -> dict:
+    """
+    Replace any `created_at: {$gte/$lte: <datetime>}` filter with an $expr
+    that uses $convert so legacy string ISO timestamps still match. Safe
+    to call even if no created_at clause is present.
+    """
+    if "created_at" not in match_stage:
+        return match_stage
+    rng = match_stage.get("created_at")
+    if not isinstance(rng, dict):
+        return match_stage
+    gte = rng.get("$gte")
+    lte = rng.get("$lte")
+    if gte is None and lte is None:
+        return match_stage
+
+    # $convert with onError=null + $ifNull fallback to avoid BSON conversion crash
+    coerced = {
+        "$convert": {
+            "input": "$created_at",
+            "to": "date",
+            "onError": None,
+            "onNull": None,
+        }
+    }
+
+    expr_and = []
+    if gte is not None:
+        expr_and.append({"$gte": [coerced, gte]})
+    if lte is not None:
+        expr_and.append({"$lte": [coerced, lte]})
+
+    new_stage = {k: v for k, v in match_stage.items() if k != "created_at"}
+    new_stage["$expr"] = {"$and": expr_and} if len(expr_and) > 1 else expr_and[0]
+    return new_stage
+
+
 class TicketService:
     async def find_existing_open_ticket(self, sender_email: str, subject: str) -> Optional[dict]:
         """
@@ -576,6 +618,8 @@ class TicketService:
 
         # CHANGE 3: exclude internal/test brands
         match_stage = _apply_internal_filter(match_stage)
+        # CHANGE 3 hotfix: also handle legacy string created_at
+        match_stage = _wrap_created_at_for_dates(match_stage)
 
         pipeline = []
         if match_stage:
@@ -606,6 +650,7 @@ class TicketService:
 
         # CHANGE 3: exclude internal/test brands
         match_stage = _apply_internal_filter(match_stage)
+        match_stage = _wrap_created_at_for_dates(match_stage)
 
         pipeline = []
         if match_stage:
@@ -635,6 +680,7 @@ class TicketService:
 
         # CHANGE 3: exclude internal/test brands
         match_stage = _apply_internal_filter(match_stage)
+        match_stage = _wrap_created_at_for_dates(match_stage)
         
         if match_stage:
             pipeline.append({"$match": match_stage})
@@ -687,6 +733,7 @@ class TicketService:
 
         # CHANGE 3
         match_stage = _apply_internal_filter(match_stage)
+        match_stage = _wrap_created_at_for_dates(match_stage)
         
         if match_stage:
             pipeline.append({"$match": match_stage})
@@ -723,17 +770,34 @@ class TicketService:
 
         # CHANGE 3
         match_stage = _apply_internal_filter(match_stage)
+        match_stage = _wrap_created_at_for_dates(match_stage)
         
         if match_stage:
             pipeline.append({"$match": match_stage})
         
+        # CHANGE 3 hotfix: coerce created_at to date BEFORE $dateToString to handle
+        # legacy tickets that may have stored created_at as ISO string.
+        pipeline.append({
+            "$addFields": {
+                "_created_at_date": {
+                    "$convert": {
+                        "input": "$created_at",
+                        "to": "date",
+                        "onError": None,
+                        "onNull": None,
+                    }
+                }
+            }
+        })
+
         pipeline.extend([
+            {"$match": {"_created_at_date": {"$ne": None}}},
             {
                 "$group": {
                     "_id": {
                         "$dateToString": {
                             "format": "%Y-%m-%d",
-                            "date": "$created_at"
+                            "date": "$_created_at_date"
                         }
                     },
                     "count": {"$sum": 1}
@@ -764,6 +828,7 @@ class TicketService:
 
         # CHANGE 3
         match_stage = _apply_internal_filter(match_stage)
+        match_stage = _wrap_created_at_for_dates(match_stage)
         
         pipeline.append({"$match": match_stage})
         
@@ -805,6 +870,7 @@ class TicketService:
 
         # CHANGE 3
         match_stage = _apply_internal_filter(match_stage)
+        match_stage = _wrap_created_at_for_dates(match_stage)
         
         pipeline.append({"$match": match_stage})
         
