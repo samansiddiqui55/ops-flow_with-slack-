@@ -1,53 +1,48 @@
-# OpsFlow — Product Requirements Document
+# OpsFlow – PRD
 
-## Original Problem Statement
-Frontend dashboard was not showing tickets even though backend was creating them correctly (Slack → Jira flow working, MongoDB storing tickets, /api/tickets/ returning data). The Support Dashboard said "No tickets found" and Analytics was blank because frontend was hitting `localhost:3000/api/tickets/` (Express dev-server) instead of the FastAPI backend. User wanted to see tickets from BOTH email AND Slack sources without changing backend logic.
+## Original problem statement
+Modify the existing OpsFlow system (Slack → Ticket → Jira → Dashboard → Analytics → Email → Node workflows) with 8 changes without breaking existing functionality. See `/app/docs/CHANGELOG.md` for the full request.
 
 ## Architecture
-- **Backend**: FastAPI on port 8001 (supervisor-managed) with MongoDB (Motor async)
-- **Frontend**: React 19 + CRACO (CRA) on port 3000, Chart.js + Lucide icons
-- **Routing**: Kubernetes ingress routes `/api/*` → backend:8001, `/*` → frontend:3000, both behind preview URL
-- **Integrations**: Jira REST (TEC project), Slack SDK (bug-reporting channel), IMAP email poller (APScheduler)
+- **Backend:** FastAPI (Python 3.11), Motor (Mongo async), APScheduler, imap-tools, slack_sdk, jira.
+- **Frontend:** React 19 + Chart.js + WebSocket.
+- **Datastore:** MongoDB (`tickets`, `email_ticket_maps`, `slack_ticket_maps`, `email_meta`).
+- **Scheduling:** AsyncIOScheduler on the FastAPI event loop (60s email poll).
 
-## User Personas
-- **Logistics Ops Engineer** — triages incoming Slack/email issues, resolves in dashboard, syncs to Jira
-- **Support Lead** — tracks team analytics: per-client/issue-type frequencies, avg TAT, source mix
-- **Brand Account Manager** — monitors a single brand's issue trends over time
+## User personas
+- **Ops engineer** – resolves logistics tickets, monitors dashboard.
+- **Analytics user** – reads metrics; needs clean per-client data.
+- **Admin** – tweaks blocklists/allowlists via JSON.
 
-## Core Requirements (Static)
-1. Tickets ingested from Slack channel + IMAP email → auto-created in Mongo + Jira
-2. Dashboard lists tickets with filter/sort/search and ticket-detail side panel
-3. Resolve action posts back to Slack thread + Jira comment
-4. Analytics: per-client, per-issue-type, time-series, brand frequency, source mix (email vs slack), TAT
-5. Real-time updates via WebSocket with 30s polling fallback
+## Core requirements (static)
+1. Email→Ticket / Slack→Ticket flows must continue to work.
+2. Resolved tickets must reopen on new Slack reply.
+3. Junk/promotional emails (Naukri, Magicbricks, NPTEL, etc.) must not become tickets.
+4. Analytics must exclude internal/test brands; time filters must be precise.
+5. Issue type classification must be accurate (no over-Delay/TAT bucketing).
+6. Full Message panel must show readable summary, not raw headers.
+7. Documentation must explain analytics formulas + the whole system.
+8. Node automation, approvals, Google Form, finance/data approvals untouched.
 
-## What's Been Implemented (2026-05-06)
-- Restored backend codebase from user-provided zip; installed missing deps (pydantic-settings, imap-tools, APScheduler, jira, slack_sdk)
-- Created `/app/frontend/.env` with `REACT_APP_BACKEND_URL` → preview URL (root cause of "No tickets found")
-- Updated `/app/backend/.env` with user's Jira/Slack creds; CORS_ORIGINS=`*`
-- Created `/app/backend/seed_mixed.py` to seed 100 demo tickets (70 email + 30 slack across 13 brands, weighted issue types, realistic TAT, jira keys TEC-1000..TEC-1099)
-- Verified backend `/api/health`, `/api/tickets/`, `/api/analytics/*` endpoints
-- Verified frontend renders Support Dashboard (ticket cards + detail panel) and Analytics Dashboard (5 summary cards + 5 charts)
-- Testing agent confirmed 100% pass on all 16 acceptance criteria
+## What's been implemented (Jan 2026)
+- **CHANGE 1** – Reopen flow: `reopen_ticket()` service, `POST /api/tickets/{id}/reopen`, Slack thread-reply branch, activity_history + reopen_count, dashboard timeline UI.
+- **CHANGE 2** – `filters/email_filters.json` + loader, allowlist/blocklist applied in `email_service`.
+- **CHANGE 3** – `filters/internal_clients.json` + `_apply_internal_filter()` merged into all analytics aggregations.
+- **CHANGE 4** – `/app/docs/ANALYTICS.md` with all formulas.
+- **CHANGE 5** – Weighted regex classifier (Delay/TAT moved last, requires logistics context), optional Emergent LLM fallback (`ISSUE_CLASSIFY_USE_LLM`).
+- **CHANGE 6** – `utils/message_cleaner.py` + `display_message` field; UI renders cleaned text and falls back to raw.
+- **CHANGE 7** – `/app/docs/SYSTEM.md`, `/app/docs/README.md`, `/app/docs/CHANGELOG.md`.
+- **CHANGE 8** – No code touched (no node/approval module in scope).
 
-### Bug Fix: Slack thread reply broken when email poller active (2026-05-06)
-- **Root cause**: `EmailPollerJob` ran in a separate thread with its own `asyncio.new_event_loop()`. Motor's `AsyncIOMotorClient` (created at module import) and `ws_manager` are bound to the FastAPI loop. Calling `ticket_service.create_ticket` from the foreign loop caused Motor / async broadcast / sync-Slack-SDK calls to silently hang in concurrent FastAPI request handlers — Slack reply line was never reached.
-- **Fix**:
-  - Replaced threaded poller with **APScheduler `AsyncIOScheduler`** running on the FastAPI main loop (`/app/backend/server.py` startup_event, max_instances=1, coalesce=True, 60s interval)
-  - Scheduler only starts when `EMAIL_USERNAME` is configured
-  - IMAP fetch (sync) offloaded via `loop.run_in_executor` so it never blocks the loop
-  - `slack_service` blocking `slack_sdk` calls (`chat_postMessage`, `users_info`, `conversations_info`, `chat_getPermalink`) now run via `run_in_executor` with explicit success/failure logs (`[SLACK] reply success` / `[SLACK] reply API error`, `exc_info=True`) — no silent swallows
-- **Verified**: Direct sim showed Slack `post_message` → `ok=True` (Jira `TEC-99` created, reply posted) on the same loop while scheduler was active.
+## Testing
+Backend: **15/15 passed** (`/app/test_reports/iteration_4.json`). Verified resolve/reopen, junk filter, analytics exclusion, period filters, hybrid classifier, display_message, WebSocket broadcasts.
 
-## Backlog (P0/P1/P2)
-- **P1** Add `data-testid` to ticket cards, search box, sort/filter buttons (testability)
-- **P1** Disable 30s polling when WebSocket is connected (avoid double-fetch)
-- **P2** Cleanup `server.py` legacy commented blocks (200+ lines)
-- **P2** Configure email IMAP creds in `.env` so live email polling resumes
-- **P2** Per-brand drill-down view from Analytics → Support filtered list
-- **P2** Bulk-resolve, ticket assignment dropdown, comment thread view
+## Prioritized backlog (next)
+- P1: Wire real Slack/Jira/Email credentials and run end-to-end.
+- P2: Expose `DELETE /api/tickets/{id}` for admin cleanup.
+- P2: Remove commented-out legacy code in `server.py` and `routes/tickets.py`.
+- P3: Log LLM fallback failures at WARN; return 400 for unknown analytics `period` values.
+- P3: Activity-history pagination / collapse on UI when count grows.
 
-## Next Tasks
-- Wire real Slack/Email creds for live ticket creation
-- Add CSV export on Analytics dashboard
-- Auth layer (currently unauthenticated)
+## Files
+See `/app/docs/CHANGELOG.md` for per-change file list.
