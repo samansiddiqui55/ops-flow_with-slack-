@@ -514,15 +514,13 @@ db = mongo_client[settings.db_name]
 
 app.add_middleware(
     CORSMiddleware,
-
-    allow_credentials=True,
-
     allow_origins=[
         "http://localhost:3000",
         "https://ops-flow-with-slack-idbm.vercel.app",
+        "https://ops-flow-with-slack-idbm-bk5d2p9gk-samans-projects-31a4d84e.vercel.app",
         "https://ops-flow-with-slack.onrender.com",
     ],
-
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
