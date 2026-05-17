@@ -401,30 +401,7 @@ body {
 /* =========================
    STATUS BADGES
 ========================= */
-.status-badge {
-  display: inline-block;
-  padding: 5px 12px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: capitalize;
-  white-space: nowrap;
-}
 
-.status-badge.open {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
-}
-
-.status-badge.in-progress {
-  background: rgba(249, 158, 11, 0.2);
-  color: #fbbf24;
-}
-
-.status-badge.resolved {
-  background: rgba(16, 185, 129, 0.2);
-  color: #34d399;
-}
 
 /* =========================
    ANALYTICS DASHBOARD

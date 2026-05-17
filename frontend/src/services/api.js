@@ -171,3 +171,23 @@ export async function triggerEmailPoll() {
 
   return await response.json();
 }
+export async function replyToSlack(ticketId, message) {
+  const response = await fetch(
+    `${API_BASE}/tickets/${ticketId}/reply`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: message
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to send Slack reply");
+  }
+
+  return await response.json();
+}
